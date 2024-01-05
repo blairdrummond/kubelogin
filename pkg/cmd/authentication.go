@@ -130,19 +130,17 @@ func (o *authenticationOptions) grantOptionSet() (s authentication.GrantOptionSe
 		}
 	case o.GrantType == "token-exchange":
 
-		var tokenExchangeOpts *tokenexchange.Option
-		tokenExchangeOpts, err = tokenexchange.NewTokenExchangeOption(
-			o.TokenExchangeSubjectToken,
-			o.TokenExchangeSubjectTokenType,
-			tokenexchange.AddAudience(o.TokenExchangeAudience),
-			tokenexchange.AddRequestedTokenType(o.TokenExchangeRequestedTokenType),
-			tokenexchange.AddResource(o.TokenExchangeResource),
-			tokenexchange.SetBasicAuth(o.TokenExchangeBasicAuth),
-			tokenexchange.AddActorToken(o.TokenExchangeActorToken, o.TokenExchangeActorTokenType),
-			tokenexchange.AddExtraParams(o.AuthRequestExtraParams),
-		)
-
-		s.TokenExchangeOption = tokenExchangeOpts
+		s.TokenExchangeOption = &tokenexchange.Option{
+			SubjectToken:           o.TokenExchangeSubjectToken,
+			SubjectTokenType:       o.TokenExchangeSubjectTokenType,
+			Audiences:              strings.Split(o.TokenExchangeAudience, ","),
+			RequestedTokenType:     o.TokenExchangeRequestedTokenType,
+			Resources:              strings.Split(o.TokenExchangeResource, ","),
+			BasicAuth:              o.TokenExchangeBasicAuth,
+			ActorToken:             o.TokenExchangeActorToken,
+			ActorTokenType:         o.TokenExchangeActorTokenType,
+			AuthRequestExtraParams: o.AuthRequestExtraParams,
+		}
 
 	default:
 		err = fmt.Errorf("grant-type must be one of (%s)", allGrantType)
