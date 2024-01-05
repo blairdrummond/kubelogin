@@ -30,18 +30,51 @@ type Option struct {
 	ActorTokenType         string            // required iff ActorToken set
 	AuthRequestExtraParams map[string]string // Optional to provided info like dex connector_id
 
+}
+
+type tokenExchangeOption struct {
+	Resources              []string
+	Audiences              []string
+	RequestedTokenType     string
+	SubjectToken           string
+	SubjectTokenType       string
+	BasicAuth              bool
+	ActorToken             string            // optional
+	ActorTokenType         string            // required iff ActorToken set
+	AuthRequestExtraParams map[string]string // Optional to provided info like dex connector_id
+
 	// accumulate validation errors
 	errors   []error
 	warnings []error
 }
 
-type TokenExchangeOption func(t Option) Option
+type tokenExchangeResponse struct {
+	AccessToken     string `json:"access_token"`
+	IssuedTokenType string `json:"issued_token_type"`
+	TokenType       string `json:"token_type"`
+	ExpiresIn       int64  `json:"expires_in"`
+	Scope           string `json:"scope"`
+	RefreshToken    string `json:"refresh_token"`
 
-func NewTokenExchangeOption(subjectToken, subjectTokenType string, options ...TokenExchangeOption) (*Option, error) {
+	// errors
+	Error            string `json:"error"`
+	ErrorDescription string `json:"error_description"`
+	ErrorURI         string `json:"error_uri"`
+}
 
-	t := Option{
-		resources: []string{},
-		audiences: []string{},
+// TokenExchange provides the oauth2 token-exchange flow.
+type TokenExchange struct {
+	Logger logger.Interface
+	// todo: expose http client
+}
+
+type tokenExchangeBuilder func(t tokenExchangeOption) tokenExchangeOption
+
+func NewTokenExchangeOption(subjectToken, subjectTokenType string, options ...tokenExchangeBuilder) (*tokenExchangeOption, error) {
+
+	t := tokenExchangeOption{
+		Resources: []string{},
+		Audiences: []string{},
 
 		errors:   []error{},
 		warnings: []error{},
@@ -58,8 +91,8 @@ func NewTokenExchangeOption(subjectToken, subjectTokenType string, options ...To
 		t.warnings = append(t.warnings, err)
 	}
 
-	t.subjectToken = subjectToken
-	t.subjectTokenType = subjectTokenType
+	t.SubjectToken = subjectToken
+	t.SubjectTokenType = subjectTokenType
 
 	for _, o := range options {
 		t = o(t)
@@ -81,8 +114,8 @@ func NewTokenExchangeOption(subjectToken, subjectTokenType string, options ...To
 
 // Support multiple "resource" parameters. Example in
 // https://datatracker.ietf.org/doc/html/draft-ietf-oauth-resource-indicators-08#section-2.1
-func AddResource(resource string) TokenExchangeOption {
-	return func(t Option) Option {
+func AddResource(resource string) tokenExchangeBuilder {
+	return func(t tokenExchangeOption) tokenExchangeOption {
 
 		// no-op
 		if resource == "" {
@@ -109,35 +142,35 @@ func AddResource(resource string) TokenExchangeOption {
 		}
 
 		if !failed {
-			t.resources = append(t.resources, resource)
+			t.Resources = append(t.Resources, resource)
 		}
 		return t
 	}
 }
 
 // Support multiple "audience" parameters
-func AddAudience(aud string) TokenExchangeOption {
-	return func(t Option) Option {
+func AddAudience(aud string) tokenExchangeBuilder {
+	return func(t tokenExchangeOption) tokenExchangeOption {
 		// no-op
 		if aud == "" {
 			return t
 		}
 
-		t.audiences = append(t.audiences, aud)
+		t.Audiences = append(t.Audiences, aud)
 		return t
 	}
 }
 
 // Support multiple "audience" parameters
-func SetBasicAuth(useBasicAuth bool) TokenExchangeOption {
-	return func(t Option) Option {
-		t.basicAuth = useBasicAuth
+func SetBasicAuth(useBasicAuth bool) tokenExchangeBuilder {
+	return func(t tokenExchangeOption) tokenExchangeOption {
+		t.BasicAuth = useBasicAuth
 		return t
 	}
 }
 
-func AddRequestedTokenType(tokenType string) TokenExchangeOption {
-	return func(t Option) Option {
+func AddRequestedTokenType(tokenType string) tokenExchangeBuilder {
+	return func(t tokenExchangeOption) tokenExchangeOption {
 
 		// no-op
 		if tokenType == "" {
@@ -148,18 +181,18 @@ func AddRequestedTokenType(tokenType string) TokenExchangeOption {
 
 		// we don't *know* if this is an error. It's just probably an error.
 		if err == nil {
-			t.requestedTokenType = canonical
+			t.RequestedTokenType = canonical
 		} else {
 			// TODO: log a warning
-			t.requestedTokenType = tokenType
+			t.RequestedTokenType = tokenType
 		}
 
 		return t
 	}
 }
 
-func AddActorToken(actorToken, actorTokenType string) TokenExchangeOption {
-	return func(t Option) Option {
+func AddActorToken(actorToken, actorTokenType string) tokenExchangeBuilder {
+	return func(t tokenExchangeOption) tokenExchangeOption {
 
 		// no-op
 		if actorToken == "" {
@@ -170,62 +203,61 @@ func AddActorToken(actorToken, actorTokenType string) TokenExchangeOption {
 
 		// we don't *know* if this is an error. It's just probably an error.
 		if err == nil {
-			t.actorTokenType = canonical
+			t.ActorTokenType = canonical
 		} else {
 			// TODO: log a warning
-			t.actorTokenType = actorTokenType
+			t.ActorTokenType = actorTokenType
 		}
 
 		return t
 	}
 }
 
-func AddExtraParams(params map[string]string) TokenExchangeOption {
-	return func(t Option) Option {
+func AddExtraParams(params map[string]string) tokenExchangeBuilder {
+	return func(t tokenExchangeOption) tokenExchangeOption {
 		// no-op
-		if t.authRequestExtraParams == nil {
-			t.authRequestExtraParams = map[string]string{}
+		if t.AuthRequestExtraParams == nil {
+			t.AuthRequestExtraParams = map[string]string{}
 		}
 
-		for k, v := range t.authRequestExtraParams {
-			t.authRequestExtraParams[k] = v
+		for k, v := range t.AuthRequestExtraParams {
+			t.AuthRequestExtraParams[k] = v
 		}
 
 		return t
 	}
 }
 
-type tokenExchangeResponse struct {
-	AccessToken     string `json:"access_token"`
-	IssuedTokenType string `json:"issued_token_type"`
-	TokenType       string `json:"token_type"`
-	ExpiresIn       int64  `json:"expires_in"`
-	Scope           string `json:"scope"`
-	RefreshToken    string `json:"refresh_token"`
+func setupTokenExchangeOptions(o *Option) (t *tokenExchangeOption, err error) {
+	t, err = NewTokenExchangeOption(
+		o.SubjectToken,
+		o.SubjectTokenType,
+		AddAudience(o.Audiences),
+		AddResource(o.Resources),
+		AddRequestedTokenType(o.RequestedTokenType),
+		SetBasicAuth(o.BasicAuth),
+		AddActorToken(o.ActorToken, o.ActorTokenType),
+		AddExtraParams(o.AuthRequestExtraParams),
+	)
 
-	// errors
-	Error            string `json:"error"`
-	ErrorDescription string `json:"error_description"`
-	ErrorURI         string `json:"error_uri"`
-}
+	return t, err
 
-// TokenExchange provides the oauth2 token-exchange flow.
-type TokenExchange struct {
-	Logger logger.Interface
 }
 
 func (u *TokenExchange) Do(ctx context.Context, params *Option, oidcProvider oidc.Provider) (*oidc.TokenSet, error) {
 	// u.Logger.V(1).Infof("starting the oauth2 token-exchange flow")
 
-	for _, warn := range params.warnings {
+	tokenExchangeOpts, err := setupTokenExchangeOptions(params)
+
+	for _, warn := range tokenExchangeOpts.warnings {
 		fmt.Printf("[token-exchange] warning: %v", warn)
 	}
 
-	for _, err := range params.errors {
+	for _, err := range tokenExchangeOpts.errors {
 		fmt.Printf("[token-exchange] error: %v", err)
 	}
-	if len(params.errors) != 0 {
-		return nil, params.errors[0]
+	if len(tokenExchangeOpts.errors) != 0 {
+		return nil, tokenExchangeOpts.errors[0]
 	}
 
 	tr := &http.Transport{
@@ -241,45 +273,45 @@ func (u *TokenExchange) Do(ctx context.Context, params *Option, oidcProvider oid
 
 	data := url.Values{}
 	data.Add("grant_type", TokenExchangeGrantType)
-	for _, aud := range params.audiences {
+	for _, aud := range tokenExchangeOpts.Audiences {
 		data.Add("audience", aud)
 	}
-	for _, resource := range params.resources {
+	for _, resource := range tokenExchangeOpts.Resources {
 		data.Add("resource", resource)
 	}
 
 	data.Add("scope", strings.Join(oidcProvider.ExtraScopes, " "))
 
-	if params.requestedTokenType != "" {
-		data.Add("requested_token_type", params.requestedTokenType)
+	if tokenExchangeOpts.RequestedTokenType != "" {
+		data.Add("requested_token_type", tokenExchangeOpts.RequestedTokenType)
 	}
 
-	fmt.Printf("env %s=%s\n", params.subjectToken, os.Getenv(params.subjectToken))
-	if val := os.Getenv(params.subjectToken); val != "" {
+	fmt.Printf("env %s=%s\n", tokenExchangeOpts.SubjectToken, os.Getenv(tokenExchangeOpts.SubjectToken))
+	if val := os.Getenv(tokenExchangeOpts.SubjectToken); val != "" {
 		data.Add("subject_token", val)
 	} else {
-		data.Add("subject_token", params.subjectToken)
+		data.Add("subject_token", tokenExchangeOpts.SubjectToken)
 	}
-	data.Add("subject_token_type", params.subjectTokenType)
+	data.Add("subject_token_type", tokenExchangeOpts.SubjectTokenType)
 
-	for k, v := range params.authRequestExtraParams {
+	for k, v := range tokenExchangeOpts.AuthRequestExtraParams {
 		data.Add(k, v)
 	}
 
-	if !params.basicAuth {
+	if !tokenExchangeOpts.BasicAuth {
 		data.Add("client_id", oidcProvider.ClientID)
 		if oidcProvider.ClientSecret != "" {
 			data.Add("client_secret", oidcProvider.ClientSecret)
 		}
 	}
 
-	if params.actorToken != "" {
-		if val := os.Getenv(params.actorToken); val != "" {
+	if tokenExchangeOpts.ActorToken != "" {
+		if val := os.Getenv(tokenExchangeOpts.ActorToken); val != "" {
 			data.Add("actor_token", val)
 		} else {
-			data.Add("actor_token", params.actorToken)
+			data.Add("actor_token", tokenExchangeOpts.ActorToken)
 		}
-		data.Add("actor_token_type", params.actorTokenType)
+		data.Add("actor_token_type", tokenExchangeOpts.ActorTokenType)
 	}
 
 	fmt.Println(data.Encode())
@@ -290,7 +322,7 @@ func (u *TokenExchange) Do(ctx context.Context, params *Option, oidcProvider oid
 	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
-	if params.basicAuth {
+	if tokenExchangeOpts.BasicAuth {
 		req.SetBasicAuth(oidcProvider.ClientID, oidcProvider.ClientSecret)
 	}
 

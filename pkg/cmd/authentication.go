@@ -131,8 +131,9 @@ func (o *authenticationOptions) grantOptionSet() (s authentication.GrantOptionSe
 	case o.GrantType == "token-exchange":
 
 		s.TokenExchangeOption = &tokenexchange.Option{
-			SubjectToken:           o.TokenExchangeSubjectToken,
-			SubjectTokenType:       o.TokenExchangeSubjectTokenType,
+			SubjectToken:     o.TokenExchangeSubjectToken,
+			SubjectTokenType: o.TokenExchangeSubjectTokenType,
+			// TODO: not sure if the split is the right thing to do here.
 			Audiences:              strings.Split(o.TokenExchangeAudience, ","),
 			RequestedTokenType:     o.TokenExchangeRequestedTokenType,
 			Resources:              strings.Split(o.TokenExchangeResource, ","),
