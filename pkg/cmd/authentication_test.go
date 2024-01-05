@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/int128/kubelogin/pkg/usecases/authentication/tokenexchange"
 	"testing"
 	"time"
 
@@ -131,6 +132,28 @@ func Test_authenticationOptions_grantOptionSet(t *testing.T) {
 				ROPCOption: &ropc.Option{
 					Username: "USER",
 					Password: "PASS",
+				},
+			},
+		},
+		"GrantType=token-exchange": {
+			args: []string{
+				"--grant-type", "token-exchange",
+				"--token-exchange-resource", "https://resource.example.com",
+				"--token-exchange-audience", "aud",
+				"--token-exchange-subject-token", "sub",
+				"--token-exchange-requested-token-type", "aud",
+				"--token-exchange-actor-token", "act",
+				"--token-exchange-actor-token-type", "act",
+			},
+			want: authentication.GrantOptionSet{
+				TokenExchangeOption: &tokenexchange.Option{
+					Resources:          []string{"https://resource.example.com"},
+					Audiences:          []string{"aud"},
+					SubjectToken:       "sub",
+					SubjectTokenType:   "<insert-valid-subject-token-type",
+					RequestedTokenType: "<insert-valid-requested-token-type",
+					ActorToken:         "act",
+					ActorTokenType:     "<insert-valid-actor-token-type",
 				},
 			},
 		},

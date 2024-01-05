@@ -20,15 +20,15 @@ import (
 const TokenExchangeGrantType = "urn:ietf:params:oauth:grant-type:token-exchange"
 
 type Option struct {
-	resources              []string
-	audiences              []string
-	requestedTokenType     string
-	subjectToken           string
-	subjectTokenType       string
-	basicAuth              bool
-	actorToken             string            // optional
-	actorTokenType         string            // required iff ActorToken set
-	authRequestExtraParams map[string]string // Optional to provided info like dex connector_id
+	Resources              []string
+	Audiences              []string
+	RequestedTokenType     string
+	SubjectToken           string
+	SubjectTokenType       string
+	BasicAuth              bool
+	ActorToken             string            // optional
+	ActorTokenType         string            // required iff ActorToken set
+	AuthRequestExtraParams map[string]string // Optional to provided info like dex connector_id
 
 	// accumulate validation errors
 	errors   []error
