@@ -145,7 +145,8 @@ func (u *Authentication) Do(ctx context.Context, in Input) (*Output, error) {
 		return &Output{TokenSet: *tokenSet}, nil
 	}
 	if in.GrantOptionSet.TokenExchangeOption != nil {
-		tokenSet, err := u.TokenExchange.Do(ctx, in.GrantOptionSet.TokenExchangeOption, in.Provider)
+		// No wonder, we were missing TLS config skipping the client all together
+		tokenSet, err := u.TokenExchange.Do(ctx, in.GrantOptionSet.TokenExchangeOption, oidcClient, provider)
 		if err != nil {
 			return nil, fmt.Errorf("token-exchange error: %w", err)
 		}
