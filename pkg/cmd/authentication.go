@@ -31,8 +31,8 @@ type authenticationOptions struct {
 	Username                    string
 	Password                    string
 
-	TokenExchangeResource           string
-	TokenExchangeAudience           string
+	TokenExchangeResources          []string
+	TokenExchangeAudiences          []string
 	TokenExchangeRequestedTokenType string
 	TokenExchangeSubjectToken       string
 	TokenExchangeSubjectTokenType   string
@@ -84,8 +84,8 @@ func (o *authenticationOptions) addFlags(f *pflag.FlagSet) {
 	f.StringToStringVar(&o.AuthRequestExtraParams, "oidc-auth-request-extra-params", nil, "[authcode, authcode-keyboard, token-exchange] Extra query parameters to send with an authentication request")
 	f.StringVar(&o.Username, "username", "", "[password] Username for resource owner password credentials grant")
 	f.StringVar(&o.Password, "password", "", "[password] Password for resource owner password credentials grant")
-	f.StringVar(&o.TokenExchangeResource, "token-exchange-resource", "", "[token-exchange] a URI for the target resource the client intends to use")
-	f.StringVar(&o.TokenExchangeAudience, "token-exchange-audience", "", "[token-exchange] the audience the client intends to use (default: client-id)")
+	f.StringSliceVar(&o.TokenExchangeResources, "token-exchange-resource", nil, "[token-exchange] a URI for the target resource the client intends to use")
+	f.StringSliceVar(&o.TokenExchangeAudiences, "token-exchange-audience", nil, "[token-exchange] the audience the client intends to use (default: client-id)")
 	f.StringVar(&o.TokenExchangeRequestedTokenType, "token-exchange-requested-token-type", "", "[token-exchange] return type desired in response, e.g. id-token or access-token")
 	f.StringVar(&o.TokenExchangeSubjectToken, "token-exchange-subject-token", "", "[token-exchange] the token to exchange (required)")
 	f.StringVar(&o.TokenExchangeSubjectTokenType, "token-exchange-subject-token-type", "", "[token-exchange] the type of token provided, e.g. id-token or access-token (required)")
@@ -134,9 +134,9 @@ func (o *authenticationOptions) grantOptionSet() (s authentication.GrantOptionSe
 			SubjectToken:     o.TokenExchangeSubjectToken,
 			SubjectTokenType: o.TokenExchangeSubjectTokenType,
 			// TODO: not sure if the split is the right thing to do here.
-			Audiences:              strings.Split(o.TokenExchangeAudience, ","),
+			Audiences:              o.TokenExchangeAudiences,
 			RequestedTokenType:     o.TokenExchangeRequestedTokenType,
-			Resources:              strings.Split(o.TokenExchangeResource, ","),
+			Resources:              o.TokenExchangeResources,
 			BasicAuth:              o.TokenExchangeBasicAuth,
 			ActorToken:             o.TokenExchangeActorToken,
 			ActorTokenType:         o.TokenExchangeActorTokenType,

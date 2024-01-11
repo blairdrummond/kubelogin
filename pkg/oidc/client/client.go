@@ -2,12 +2,8 @@ package client
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
-	"os"
-	"strings"
 	"time"
 
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
@@ -29,7 +25,6 @@ type Interface interface {
 	ExchangeDeviceCode(ctx context.Context, authResponse *oauth2dev.AuthorizationResponse) (*oidc.TokenSet, error)
 	Refresh(ctx context.Context, refreshToken string) (*oidc.TokenSet, error)
 	SupportedPKCEMethods() []string
-	GetTokenByTokenExchange(ctx context.Context, in TokenExchangeInput) (*oidc.TokenSet, error)
 }
 
 type AuthCodeURLInput struct {
@@ -59,19 +54,17 @@ type GetTokenByAuthCodeInput struct {
 	LocalServerKeyFile     string
 }
 
-// https://datatracker.ietf.org/doc/html/rfc8693#name-token-exchange-request-and-
-type TokenExchangeInput struct {
-	Resources              []string
-	Audiences              []string
-	Scope                  string
-	SubjectToken           string
-	SubjectTokenType       string
-	ActorToken             string
-	ActorTokenType         string
-	RequestedTokenType     string
-	BasicAuth              bool
-	AuthRequestExtraParams map[string]string
-}
+// // https://datatracker.ietf.org/doc/html/rfc8693#name-token-exchange-request-and-
+// type TokenExchangeInput struct {
+// 	ResourceURI        string
+// 	Audience           string
+// 	Scope              string
+// 	SubjectToken       string
+// 	SubjectTokenType   string
+// 	ActorToken         string
+// 	ActorTokenType     string
+// 	RequestedTokenType string
+// }
 
 type client struct {
 	httpClient                  *http.Client
@@ -172,113 +165,6 @@ func (c *client) GetTokenByROPC(ctx context.Context, username, password string) 
 		return nil, fmt.Errorf("resource owner password credentials flow error: %w", err)
 	}
 	return c.verifyToken(ctx, token, "")
-}
-
-const TokenExchangeGrantType = "urn:ietf:params:oauth:grant-type:token-exchange"
-
-type tokenExchangeResponse struct {
-	AccessToken     string `json:"access_token"`
-	IssuedTokenType string `json:"issued_token_type"`
-	TokenType       string `json:"token_type"`
-	ExpiresIn       int64  `json:"expires_in"`
-	Scope           string `json:"scope"`
-	RefreshToken    string `json:"refresh_token"`
-
-	// errors
-	Error            string `json:"error"`
-	ErrorDescription string `json:"error_description"`
-	ErrorURI         string `json:"error_uri"`
-}
-
-// GetTokenByTokenExchange performs the resource owner password credentials flow.
-func (c *client) GetTokenByTokenExchange(ctx context.Context, in TokenExchangeInput) (*oidc.TokenSet, error) {
-	ctx = c.wrapContext(ctx)
-
-
-	ctx = gooidc.ClientContext(ctx, c.httpClient)
-	discovery, err := gooidc.NewProvider(ctx, c.oauth2Config.)
-
-	data := url.Values{}
-	data.Add("grant_type", TokenExchangeGrantType)
-	for _, aud := range in.Audiences {
-		data.Add("audience", aud)
-	}
-	for _, resource := range in.Resources {
-		data.Add("resource", resource)
-	}
-
-	data.Add("scope", strings.Join(c.oauth2Config.Scopes, " "))
-
-	if in.RequestedTokenType != "" {
-		data.Add("requested_token_type", in.RequestedTokenType)
-	}
-
-	fmt.Printf("env %s=%s\n", in.SubjectToken, os.Getenv(in.SubjectToken))
-	if val := os.Getenv(in.SubjectToken); val != "" {
-		data.Add("subject_token", val)
-	} else {
-		data.Add("subject_token", in.SubjectToken)
-	}
-	data.Add("subject_token_type", in.SubjectTokenType)
-
-	for k, v := range in.AuthRequestExtraParams {
-		data.Add(k, v)
-	}
-
-	if !in.BasicAuth {
-		data.Add("client_id", c.oauth2Config.ClientID)
-		if c.oauth2Config.ClientSecret != "" {
-			data.Add("client_secret", c.oauth2Config.ClientSecret)
-		}
-	}
-
-	if in.ActorToken != "" {
-		if val := os.Getenv(in.ActorToken); val != "" {
-			data.Add("actor_token", val)
-		} else {
-			data.Add("actor_token", in.ActorToken)
-		}
-		data.Add("actor_token_type", in.ActorTokenType)
-	}
-
-	fmt.Println(data.Encode())
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, discovery.Endpoint().TokenURL, strings.NewReader(data.Encode()))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-
-	if in.BasicAuth {
-		req.SetBasicAuth(c.oauth2Config.ClientID, c.oauth2Config.ClientSecret)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("token-exchange error: %w", err)
-	}
-	defer resp.Body.Close()
-	if err != nil {
-		return nil, fmt.Errorf("token-exchange error: %w", err)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("token-exchange: exchange failed: %w", err)
-	}
-	var respData tokenExchangeResponse
-	err = json.NewDecoder(resp.Body).Decode(&respData)
-	if err != nil {
-		return nil, fmt.Errorf("token-exchange error: %w", err)
-	}
-
-	if respData.Error != "" {
-		return nil, fmt.Errorf("token-exchange error: %s %s %s", respData.Error, respData.ErrorDescription, respData.ErrorURI)
-	}
-
-	// u.Logger.V(1).Infof("finished the oauth2 token-exchange flow")
-	return &oidc.TokenSet{
-		IDToken:      respData.AccessToken,
-		RefreshToken: respData.RefreshToken,
-	}, nil
 }
 
 // GetDeviceAuthorization initializes the device authorization code challenge
