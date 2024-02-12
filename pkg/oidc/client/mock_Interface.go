@@ -4,6 +4,7 @@ package client
 
 import (
 	context "context"
+	"net/http"
 
 	oauth2dev "github.com/int128/oauth2dev"
 	mock "github.com/stretchr/testify/mock"
@@ -135,6 +136,22 @@ func (_m *MockInterface) GetAuthCodeURL(in AuthCodeURLInput) string {
 // MockInterface_GetAuthCodeURL_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAuthCodeURL'
 type MockInterface_GetAuthCodeURL_Call struct {
 	*mock.Call
+}
+
+// GetClient provides a mock function with given fields: ctx
+func (_m *MockInterface) GetClient(ctx interface{}) *http.Client {
+	ret := _m.Called(ctx)
+
+	var r0 *http.Client
+	if rf, ok := ret.Get(0).(func(context.Context) *http.Client); ok {
+		r0 = rf(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*http.Client)
+		}
+	}
+
+	return r0
 }
 
 // GetAuthCodeURL is a helper method to define mock.On call
@@ -346,6 +363,43 @@ func (_c *MockInterface_Refresh_Call) Return(_a0 *oidc.TokenSet, _a1 error) *Moc
 
 // SupportedPKCEMethods provides a mock function with given fields:
 func (_m *MockInterface) SupportedPKCEMethods() []string {
+	ret := _m.Called()
+
+	var r0 []string
+	if rf, ok := ret.Get(0).(func() []string); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+
+	return r0
+}
+
+// MockInterface_SupportedPKCEMethods_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SupportedPKCEMethods'
+type MockInterface_SupportedPKCEMethods_Call struct {
+	*mock.Call
+}
+
+// SupportedPKCEMethods is a helper method to define mock.On call
+func (_e *MockInterface_Expecter) SupportedPKCEMethods() *MockInterface_SupportedPKCEMethods_Call {
+	return &MockInterface_SupportedPKCEMethods_Call{Call: _e.mock.On("SupportedPKCEMethods")}
+}
+
+func (_c *MockInterface_SupportedPKCEMethods_Call) Run(run func()) *MockInterface_SupportedPKCEMethods_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockInterface_SupportedPKCEMethods_Call) Return(_a0 []string) *MockInterface_SupportedPKCEMethods_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+// SupportedPKCEMethods provides a mock function with given fields:
 	ret := _m.Called()
 
 	var r0 []string

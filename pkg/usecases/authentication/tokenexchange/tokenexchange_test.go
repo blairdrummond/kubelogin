@@ -3,23 +3,89 @@ package tokenexchange
 import (
 	"context"
 	"errors"
+	"github.com/int128/kubelogin/pkg/oidc"
+	"github.com/int128/oauth2dev"
 	"testing"
 
 	"github.com/int128/kubelogin/pkg/oidc/client"
 	"github.com/int128/kubelogin/pkg/testing/logger"
 )
 
-func TestDeviceCode(t *testing.T) {
+func TestTokenExchange(t *testing.T) {
 	ctx := context.TODO()
 
-	t.Run("Authorization error", func(t *testing.T) {
+	t.Run("empty config", func(t *testing.T) {
 		mockClient := client.NewMockInterface(t)
 		dc := &TokenExchange{
 			Logger: logger.New(t),
 		}
-		errTest := errors.New("test error")
-		mockClient.EXPECT().GetDeviceAuthorization(ctx).Return(nil, errTest).Once()
-		_, err := dc.Do(ctx, &Option{}, mockClient)
+		errTest := errors.New("Token exchange errors: 1\nsubject_token is required")
+		provider := oidc.Provider{}
+
+		_, err := dc.Do(ctx, &Option{}, mockClient, provider)
+		if errors.Is(err, errTest) {
+			t.Errorf("returned error is not the test error: %v", err)
+		}
+	})
+
+	t.Run("happy path", func(t *testing.T) {
+		mockClient := client.NewMockInterface(t)
+		dc := &TokenExchange{
+			Logger: logger.New(t),
+		}
+		errTest := errors.New("Token exchange errors: 1\nsubject_token is required")
+		provider := oidc.Provider{
+			IssuerURL:    "https://example.com",
+			ClientSecret: "client_secret",
+			ClientID:     "client_id",
+		}
+
+		options := Option{
+			Resources:          []string{"https://example.com"},
+			Audiences:          []string{"https://foo.com"},
+			RequestedTokenType: "foo",
+			SubjectToken:       "sub",
+			SubjectTokenType:   "sub-type",
+			BasicAuth:          false,
+		}
+
+		mockClient.EXPECT().Ge(ctx).Return(&oauth2dev.AuthorizationResponse{
+			Interval:                1,
+			ExpiresIn:               2,
+			VerificationURIComplete: "https://example.com/verificationComplete?code=code123",
+			DeviceCode:              "device-code-1",
+		}, nil).Once()
+
+		_, err := dc.Do(ctx, &options, mockClient, provider)
+		if errors.Is(err, errTest) {
+			t.Errorf("returned error is not the test error: %v", err)
+		}
+	})
+
+	t.Run("provide optional actor token", func(t *testing.T) {
+		mockClient := client.NewMockInterface(t)
+		dc := &TokenExchange{
+			Logger: logger.New(t),
+		}
+		errTest := errors.New("Token exchange errors: 1\nsubject_token is required")
+		provider := oidc.Provider{
+			IssuerURL:    "https://example.com",
+			ClientSecret: "client_secret",
+			ClientID:     "client_id",
+		}
+
+		options := Option{
+			Resources:          []string{"https://example.com"},
+			Audiences:          []string{"https://foo.com"},
+			RequestedTokenType: "foo",
+			SubjectToken:       "sub",
+			SubjectTokenType:   "sub-type",
+			BasicAuth:          false,
+			ActorToken:         "act",
+			ActorTokenType:     "act-type",
+		}
+
+		_, err := dc.Do(ctx, &options, mockClient, provider)
 		if !errors.Is(err, errTest) {
 			t.Errorf("returned error is not the test error: %v", err)
 		}
@@ -32,7 +98,7 @@ func TestDeviceCode(t *testing.T) {
 	//		Browser: mockBrowser,
 	//		Logger:  logger.New(t),
 	//	}
-	//	mockResponse := &oauth2dev.AuthorizationResponse{
+	//	mocResponse := &oauth2dev.AuthorizationResponse{
 	//		DeviceCode:              "device-code-1",
 	//		VerificationURIComplete: "https://example.com/verificationComplete?code=code123",
 	//		ExpiresIn:               2,

@@ -25,6 +25,7 @@ type Interface interface {
 	ExchangeDeviceCode(ctx context.Context, authResponse *oauth2dev.AuthorizationResponse) (*oidc.TokenSet, error)
 	Refresh(ctx context.Context, refreshToken string) (*oidc.TokenSet, error)
 	SupportedPKCEMethods() []string
+	GetClient(ctx context.Context) *http.Client
 }
 
 type AuthCodeURLInput struct {
@@ -175,6 +176,12 @@ func (c *client) GetDeviceAuthorization(ctx context.Context) (*oauth2dev.Authori
 		AuthURL: c.deviceAuthorizationEndpoint,
 	}
 	return oauth2dev.RetrieveCode(ctx, config)
+}
+
+// Exposes the HTTP client to be used for use cases where the oauth Client is not required.
+func (c *client) GetClient(ctx context.Context) *http.Client {
+	return c.httpClient
+
 }
 
 // ExchangeDeviceCode exchanges the device to an oidc.TokenSet

@@ -2,12 +2,19 @@ package tokenexchange
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/int128/kubelogin/pkg/oidc/client"
+	"net/http"
+	"net/url"
+	"os"
+	"strings"
+
+	gooidc "github.com/coreos/go-oidc/v3/oidc"
+
 	"github.com/int128/kubelogin/pkg/infrastructure/logger"
 	"github.com/int128/kubelogin/pkg/oidc"
-	"github.com/int128/kubelogin/pkg/oidc/client"
 	"github.com/int128/kubelogin/pkg/usecases/authentication/identifiers"
-	"net/url"
 )
 
 const TokenExchangeGrantType = "urn:ietf:params:oauth:grant-type:token-exchange"
@@ -225,22 +232,33 @@ func setupTokenExchangeOptions(o *Option) (t *tokenExchangeOption, err error) {
 	t, err = NewTokenExchangeOption(
 		o.SubjectToken,
 		o.SubjectTokenType,
-		AddAudience(o.Audiences),
-		AddResource(o.Resources),
 		AddRequestedTokenType(o.RequestedTokenType),
 		SetBasicAuth(o.BasicAuth),
 		AddActorToken(o.ActorToken, o.ActorTokenType),
 		AddExtraParams(o.AuthRequestExtraParams),
 	)
 
+	for _, audience := range o.Audiences {
+		AddAudience(audience)
+	}
+	for _, resource := range o.Resources {
+		AddResource(resource)
+	}
+
 	return t, err
 
 }
 
-func (u *TokenExchange) Do(ctx context.Context, params *Option, oidcClient client.Interface, provider oidc.Provider) (*oidc.TokenSet, error) {
+func (u *TokenExchange) Do(ctx context.Context, params *Option, oidcClient client.Interface, oidcProvider oidc.Provider) (*oidc.TokenSet, error) {
 	// u.Logger.V(1).Infof("starting the oauth2 token-exchange flow")
 
+	// u.Logger.V(1).Infof("starting the oauth2 token-exchange flow")
 	tokenExchangeOpts, err := setupTokenExchangeOptions(params)
+
+	if err != nil {
+		return nil, err
+
+	}
 
 	for _, warn := range tokenExchangeOpts.warnings {
 		fmt.Printf("[token-exchange] warning: %v", warn)
@@ -252,6 +270,92 @@ func (u *TokenExchange) Do(ctx context.Context, params *Option, oidcClient clien
 	if len(tokenExchangeOpts.errors) != 0 {
 		return nil, tokenExchangeOpts.errors[0]
 	}
-	oidcClient.GetTokenByTokenExchange(ctx, tokenExchangeOpts)
+
+	client := oidcClient.GetClient(ctx)
+
+	ctx = gooidc.ClientContext(ctx, client)
+	discovery, err := gooidc.NewProvider(ctx, oidcProvider.IssuerURL)
+	if err != nil {
+		return nil, fmt.Errorf("token-exchange error: %w", err)
+	}
+
+	data := url.Values{}
+	data.Add("grant_type", TokenExchangeGrantType)
+	for _, aud := range tokenExchangeOpts.Audiences {
+		data.Add("audience", aud)
+	}
+	for _, resource := range tokenExchangeOpts.Resources {
+		data.Add("resource", resource)
+	}
+
+	data.Add("scope", strings.Join(oidcProvider.ExtraScopes, " "))
+
+	if tokenExchangeOpts.RequestedTokenType != "" {
+		data.Add("requested_token_type", tokenExchangeOpts.RequestedTokenType)
+	}
+
+	fmt.Printf("env %s=%s\n", tokenExchangeOpts.SubjectToken, os.Getenv(tokenExchangeOpts.SubjectToken))
+	if val := os.Getenv(tokenExchangeOpts.SubjectToken); val != "" {
+		data.Add("subject_token", val)
+	} else {
+		data.Add("subject_token", tokenExchangeOpts.SubjectToken)
+	}
+	data.Add("subject_token_type", tokenExchangeOpts.SubjectTokenType)
+
+	if tokenExchangeOpts.AuthRequestExtraParams != nil {
+		for k, v := range tokenExchangeOpts.AuthRequestExtraParams {
+			data.Add(k, v)
+		}
+	}
+
+	if !tokenExchangeOpts.BasicAuth {
+		data.Add("client_id", oidcProvider.ClientID)
+		if oidcProvider.ClientSecret != "" {
+			data.Add("client_secret", oidcProvider.ClientSecret)
+		}
+	}
+
+	if tokenExchangeOpts.ActorToken != "" {
+		if val := os.Getenv(tokenExchangeOpts.ActorToken); val != "" {
+			data.Add("actor_token", val)
+		} else {
+			data.Add("actor_token", tokenExchangeOpts.ActorToken)
+		}
+		data.Add("actor_token_type", tokenExchangeOpts.ActorTokenType)
+	}
+
+	fmt.Println(data.Encode())
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, discovery.Endpoint().TokenURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+
+	if tokenExchangeOpts.BasicAuth {
+		req.SetBasicAuth(oidcProvider.ClientID, oidcProvider.ClientSecret)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("token-exchange error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var respData tokenExchangeResponse
+	err = json.NewDecoder(resp.Body).Decode(&respData)
+	if err != nil {
+		return nil, fmt.Errorf("token-exchange error: %w", err)
+	}
+
+	if respData.Error != "" {
+		return nil, fmt.Errorf("token-exchange error: %s %s %s", respData.Error, respData.ErrorDescription, respData.ErrorURI)
+	}
+
+	// u.Logger.V(1).Infof("finished the oauth2 token-exchange flow")
+	return &oidc.TokenSet{
+		IDToken:      respData.AccessToken,
+		RefreshToken: respData.RefreshToken,
+	}, nil
 
 }
